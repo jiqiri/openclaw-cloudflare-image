@@ -13,13 +13,17 @@ const ASPECT_RATIO_SIZES = {
 
 function parseSize(value) {
   if (typeof value !== "string") return null;
+
   const match = value.trim().match(/^(\d{3,4})x(\d{3,4})$/i);
   if (!match) return null;
+
   const width = Number(match[1]);
   const height = Number(match[2]);
+
   if (width < 256 || width > 1920 || height < 256 || height > 1920) {
     return null;
   }
+
   return { width, height };
 }
 
@@ -34,6 +38,30 @@ function resolveDimensions(req) {
     sizeFromAspectRatio(req.aspectRatio) ||
     { width: 1200, height: 630 }
   );
+}
+
+function slugify(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 100);
+}
+
+function resolveFilename(req, width, height) {
+  const requested = slugify(req.filename);
+
+  if (requested) {
+    return requested.endsWith(".jpg")
+      ? requested
+      : `${requested}.jpg`;
+  }
+
+  return `generated-image-${width}x${height}.jpg`;
 }
 
 function apiUrl() {
@@ -70,13 +98,17 @@ export default function (api) {
     },
 
     async generateImage(req) {
-      if (!process.env.CF_WORKERS_AI_ACCOUNT || !process.env.CF_WORKERS_AI_TOKEN) {
+      if (
+        !process.env.CF_WORKERS_AI_ACCOUNT ||
+        !process.env.CF_WORKERS_AI_TOKEN
+      ) {
         throw new Error(
           "Cloudflare image provider is not configured. Set CF_WORKERS_AI_ACCOUNT and CF_WORKERS_AI_TOKEN."
         );
       }
 
       const { width, height } = resolveDimensions(req);
+
       const form = new FormData();
       form.append("prompt", String(req.prompt || ""));
       form.append("width", String(width));
@@ -91,20 +123,29 @@ export default function (api) {
       });
 
       const text = await response.text();
+
       if (!response.ok) {
-        throw new Error(`Cloudflare image API ${response.status}: ${text}`);
+        throw new Error(
+          `Cloudflare image API ${response.status}: ${text}`
+        );
       }
 
       let data;
+
       try {
         data = JSON.parse(text);
       } catch {
-        throw new Error(`Cloudflare returned invalid JSON: ${text}`);
+        throw new Error(
+          `Cloudflare returned invalid JSON: ${text}`
+        );
       }
 
       const imageBase64 = data?.result?.image;
+
       if (!imageBase64) {
-        throw new Error(`Cloudflare returned no image: ${text}`);
+        throw new Error(
+          `Cloudflare returned no image: ${text}`
+        );
       }
 
       return {
@@ -112,19 +153,11 @@ export default function (api) {
           {
             buffer: Buffer.from(imageBase64, "base64"),
             mimeType: "image/jpeg",
-            fileName: `cloudflare-${width}x${height}.jpg`
+            fileName: resolveFilename(req, width, height)
           }
         ],
         model: MODEL
       };
     }
   });
-
-  api.on("before_prompt_build", () => ({
-    appendSystemContext:
-      "---\n# Cloudflare Image Generation Guidance\n" +
-      "When generating an image, use the image_generate tool without an explicit model unless the user explicitly requests a model. The configured primary image provider is Cloudflare Workers AI. " +
-      "When the user specifies a platform or destination, pass the platform-appropriate size to image_generate. Defaults: blog/SEO/featured/OG 1200x630; Facebook 1200x630; LinkedIn 1200x627; X/Twitter 1200x675; YouTube thumbnail 1280x720; Instagram square 1080x1080; Instagram portrait/feed 1080x1350; Instagram Story/Reel 1080x1920; TikTok 1080x1920; Pinterest 1000x1500. " +
-      "If the user explicitly gives a size or aspect ratio, follow it. If no platform, size, or ratio is specified, default to 1200x630 for article/thumbnail/featured-image requests and 1024x1024 for generic image requests. Do not crop after generation just to satisfy an aspect ratio when the requested dimensions can be generated directly."
-  }));
 }

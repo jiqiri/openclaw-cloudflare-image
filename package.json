@@ -1,6 +1,6 @@
 {
   "name": "openclaw-cloudflare-image",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Cloudflare Workers AI FLUX.2 Klein 4B image provider for OpenClaw with platform-aware image sizing guidance.",
   "type": "module",
   "openclaw": {
