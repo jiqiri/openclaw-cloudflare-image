@@ -1,0 +1,23 @@
+{
+  "id": "cloudflare-image",
+  "name": "Cloudflare Workers AI Image",
+  "description": "Native OpenClaw image provider using Cloudflare Workers AI FLUX.2 Klein 4B.",
+  "providers": ["cloudflare"],
+  "contracts": {
+    "imageGenerationProviders": ["cloudflare"]
+  },
+  "skills": ["./skills/cf-image-guidance"],
+  "setup": {
+    "providers": [
+      {
+        "id": "cloudflare",
+        "envVars": ["CF_WORKERS_AI_ACCOUNT", "CF_WORKERS_AI_TOKEN"]
+      }
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
